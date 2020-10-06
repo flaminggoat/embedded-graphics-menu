@@ -9,7 +9,7 @@ use embedded_graphics_menu::{EntryType, Keys, Menu, MenuOptions};
 
 fn main() -> Result<(), std::convert::Infallible> {
     let mut display: SimulatorDisplay<Rgb565> = SimulatorDisplay::new(Size::new(128, 160));
-    let output_settings = OutputSettingsBuilder::new().scale(4).build();
+    let output_settings = OutputSettingsBuilder::new().scale(2).build();
     let mut window = Window::new("rgb", &output_settings);
 
     let mut keys = Keys {

@@ -1,6 +1,4 @@
-# stm32f429-discovery-rust
-STM32F429 Discovery Display Demo
+# Embedded Graphics menu
+Graphical menu for small screens using rust [embedded-graphics](https://github.com/jamwaffles/embedded-graphics).
 
-Supports SPI or Parallel TFT display connection
-
-![alt text](https://raw.githubusercontent.com/flaminggoat/stm32f429-discovery-rust/master/Doc/DisplayInAction.jpg "Displaying Image")
+![Examples](/doc/examples.png)
