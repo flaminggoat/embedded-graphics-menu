@@ -5,7 +5,8 @@ use embedded_graphics_simulator::{
 use sdl2::keyboard::Keycode;
 use std::{thread, time::Duration};
 
-use embedded_graphics_menu::{EntryType, Keys, Menu, MenuOptions};
+use embedded_graphics_menu::{EntryType, Keys, Menu, MenuEntry, MenuOptions};
+use generic_array::GenericArray;
 
 fn main() -> Result<(), std::convert::Infallible> {
     let mut bw_display: SimulatorDisplay<BinaryColor> = SimulatorDisplay::new(Size::new(128, 64));
@@ -33,12 +34,21 @@ fn main() -> Result<(), std::convert::Infallible> {
         spacing: 10,
         font: embedded_graphics::fonts::Font6x8,
     };
-    let mut menu_structure = [
-        ("Start", EntryType::Select),
-        ("Sound on", EntryType::Bool(false)),
-        ("Volume", EntryType::I32((-3, -10, 10))),
-    ];
-    let mut m = Menu::new(&colors, bw_display.bounding_box().size, &mut menu_structure);
+    let menu_structure = GenericArray::from([
+        MenuEntry {
+            l: "Start",
+            t: EntryType::Select,
+        },
+        MenuEntry {
+            l: "Sound on",
+            t: EntryType::Bool(false),
+        },
+        MenuEntry {
+            l: "Volume",
+            t: EntryType::I32((-3, -10, 10)),
+        },
+    ]);
+    let mut m = Menu::new("Demo",colors, bw_display.bounding_box().size, menu_structure);
 
     'running: loop {
         bw_window.update(&mut bw_display);

@@ -5,7 +5,8 @@ use embedded_graphics_simulator::{
 use sdl2::keyboard::Keycode;
 use std::{thread, time::Duration};
 
-use embedded_graphics_menu::{EntryType, Keys, Menu, MenuOptions};
+use embedded_graphics_menu::{EntryType, Keys, Menu, MenuEntry, MenuOptions};
+use generic_array::GenericArray;
 
 fn main() -> Result<(), std::convert::Infallible> {
     let mut display: SimulatorDisplay<Rgb565> = SimulatorDisplay::new(Size::new(128, 160));
@@ -29,26 +30,54 @@ fn main() -> Result<(), std::convert::Infallible> {
         spacing: 17,
         font: embedded_graphics::fonts::Font6x8,
     };
-    let mut menu_structure = [
-        ("Start", EntryType::Select),
-        ("Sound on", EntryType::Bool(false)),
-        ("Volume", EntryType::I32((-3,-10, 10))),
-    ];
-    let mut start_menu_structure = [
-        ("Cake", EntryType::Select),
-        ("Mouse", EntryType::Select),
-        ("Melon", EntryType::Select),
-        ("Back", EntryType::Select),
-    ];
+    let menu_structure = GenericArray::from([
+        MenuEntry {
+            l: "Menu",
+            t: EntryType::Select,
+        },
+        MenuEntry {
+            l: "Music on",
+            t: EntryType::Bool(false),
+        },
+        MenuEntry {
+            l: "Heater",
+            t: EntryType::I32((-3, -10, 10)),
+        },
+    ]);
+    let start_menu_structure = GenericArray::from([
+        MenuEntry {
+            l: "Cake",
+            t: EntryType::Select,
+        },
+        MenuEntry {
+            l: "Melon",
+            t: EntryType::Select,
+        },
+        MenuEntry {
+            l: "Cheese",
+            t: EntryType::Select,
+        },
+        MenuEntry {
+            l: "Back",
+            t: EntryType::Select,
+        },
+    ]);
 
-    let mut m = Menu::new(&options, display.bounding_box().size, &mut menu_structure);
-    let mut m2 = Menu::new(
-        &options,
+    let mut m = Menu::new(
+        "Shop",
+        options.clone(),
         display.bounding_box().size,
-        &mut start_menu_structure,
+        menu_structure,
+    );
+    let mut m2 = Menu::new(
+        "Food Choices",
+        options,
+        display.bounding_box().size,
+        start_menu_structure,
     );
 
     let mut current_menu = 0;
+    let mut heater = -3;
 
     'running: loop {
         // display.clear(Rgb565::WHITE)?;
@@ -99,9 +128,18 @@ fn main() -> Result<(), std::convert::Infallible> {
             }
         }
 
-        // if g.game_loop(&keys, &mut display).unwrap() == false {
-        //     break 'running Ok(())
-        // }
+        // Read heater value from menu
+        let h = Some(m.entry_at(2).and_then(|entry| match entry.t {
+            EntryType::I32((h, _, _)) => Some(h),
+            _ => None,
+        }))
+        .unwrap_or(None)
+        .unwrap_or(0);
+
+        if h != heater {
+            heater = h;
+            println!("Heater {}", heater);
+        }
 
         keys.a = false;
         keys.b = false;

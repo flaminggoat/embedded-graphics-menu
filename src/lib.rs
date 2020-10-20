@@ -1,3 +1,5 @@
+#![no_std]
+
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::fonts::Font;
 use embedded_graphics::fonts::{Font6x8, Text};
@@ -8,6 +10,7 @@ use embedded_graphics::primitives::Rectangle;
 use embedded_graphics::style::{PrimitiveStyle, TextStyle};
 
 use core::fmt::Write;
+use generic_array::{ArrayLength, GenericArray};
 use heapless::consts::*;
 use heapless::String;
 
@@ -20,6 +23,7 @@ pub enum EntryType {
     I32((i32, i32, i32)),
 }
 
+#[derive(Default, Clone)]
 pub struct Keys {
     pub up: bool,
     pub down: bool,
@@ -29,6 +33,12 @@ pub struct Keys {
     pub b: bool,
 }
 
+pub struct MenuEntry<'a> {
+    pub l: &'a str,
+    pub t: EntryType,
+}
+
+#[derive(Clone)]
 pub struct MenuOptions<C: PixelColor, F: Font> {
     pub background: C,
     pub text: C,
@@ -37,32 +47,43 @@ pub struct MenuOptions<C: PixelColor, F: Font> {
     pub border: u32,
     pub spacing: u32,
 }
-pub struct Menu<'a, C: PixelColor, F: Font> {
-    highlighted_option: u8,
-    selected: bool,
-    redraw: bool,
-    structure: &'a mut [(&'a str, EntryType)],
-    size: Size,
-    options: &'a MenuOptions<C, F>,
-}
-
-impl<'a, C, F> Menu<'a, C, F>
+pub struct Menu<'a, C, F, S>
 where
     C: PixelColor,
     F: Font,
+    S: ArrayLength<MenuEntry<'a>>,
+{
+    title: &'a str,
+    highlighted_option: u8,
+    selected: bool,
+    redraw: bool,
+    size: Size,
+    options: MenuOptions<C, F>,
+    structure: GenericArray<MenuEntry<'a>, S>,
+    last_keys: Keys
+}
+
+impl<'a, C, F, S> Menu<'a, C, F, S>
+where
+    C: PixelColor,
+    F: Font,
+    S: ArrayLength<MenuEntry<'a>>
 {
     pub fn new(
-        options: &'a MenuOptions<C, F>,
+        title: &'a str,
+        options: MenuOptions<C, F>,
         size: Size,
-        structure: &'a mut [(&'a str, EntryType)],
-    ) -> Menu<'a, C, F> {
+        structure: GenericArray<MenuEntry<'a>,S>,
+    ) -> Menu<'a, C, F, S> {
         Menu {
+            title,
             redraw: true,
             highlighted_option: 0,
             selected: false,
             structure,
             size,
             options,
+            last_keys: Keys::default()
         }
     }
 
@@ -74,13 +95,26 @@ where
         }
     }
 
+    pub fn entry_at(&self, index: usize) -> Option<&MenuEntry> {
+        self.structure.get(index)
+    }
+
     pub fn update(&mut self, keys: &Keys) -> bool {
         let mut tmp_opt = self.highlighted_option as i8;
 
-        if keys.up {
+        let tmp_keys = Keys {
+            a: keys.a && !self.last_keys.a,
+            b: keys.b && !self.last_keys.b,
+            left: keys.left && !self.last_keys.left,
+            up: keys.up && !self.last_keys.up,
+            down: keys.down && !self.last_keys.down,
+            right: keys.right && !self.last_keys.right,
+        };
+
+        if tmp_keys.up {
             tmp_opt -= 1;
         }
-        if keys.down {
+        if tmp_keys.down {
             tmp_opt += 1;
         }
 
@@ -92,28 +126,30 @@ where
 
         self.highlighted_option = tmp_opt as u8;
 
-        self.selected = keys.a;
+        self.selected = tmp_keys.a;
 
-        if keys.up || keys.down || keys.a || keys.right || keys.left {
+        if tmp_keys.up || tmp_keys.down || tmp_keys.a || tmp_keys.right || tmp_keys.left {
             self.redraw = true;
         }
 
-        match self.structure[self.highlighted_option as usize].1 {
+        match self.structure[self.highlighted_option as usize].t {
             EntryType::Bool(ref mut val) => {
-                if keys.left || keys.right || keys.a {
+                if tmp_keys.left || tmp_keys.right || tmp_keys.a {
                     *val = !*val;
                 }
             }
             EntryType::I32(ref mut val) => {
-                if keys.right && ((*val).0 < (*val).2) {
+                if tmp_keys.right && ((*val).0 < (*val).2) {
                     (*val).0 += 1;
                 }
-                if keys.left && ((*val).0 > (*val).1) {
+                if tmp_keys.left && ((*val).0 > (*val).1) {
                     (*val).0 -= 1;
                 }
             }
             _ => {}
         }
+
+        self.last_keys = keys.clone();
 
         false
     }
@@ -158,8 +194,8 @@ where
 
             self.draw_text(
                 display,
-                "Menu",
-                self.size.width as i32 / 2 - "Menu".len() as i32 * font_width / 2,
+                self.title,
+                self.size.width as i32 / 2 - self.title.len() as i32 * font_width / 2,
                 self.options.border as i32 + title_border as i32,
             )?;
 
@@ -173,9 +209,9 @@ where
                 // let entry_text_x = text_x + (self.structure[i].0.len() as i32 + 1) * 6;
                 let text_y = text_y_start + i as i32 * self.options.spacing as i32;
 
-                self.draw_text(display, self.structure[i].0, text_x, text_y)?;
+                self.draw_text(display, self.structure[i].l, text_x, text_y)?;
 
-                match self.structure[i].1 {
+                match self.structure[i].t {
                     EntryType::Select => {}
                     EntryType::Bool(val) => {
                         let x = match val {
@@ -215,7 +251,7 @@ where
                         + self.highlighted_option as i32 * self.options.spacing as i32,
                 ),
                 Size::new(
-                    self.structure[self.highlighted_option as usize].0.len() as u32 * 6,
+                    self.structure[self.highlighted_option as usize].l.len() as u32 * 6,
                     1,
                 ),
             )
