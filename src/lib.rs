@@ -10,17 +10,24 @@ use embedded_graphics::primitives::Rectangle;
 use embedded_graphics::style::{PrimitiveStyle, TextStyle};
 
 use core::fmt::Write;
-use generic_array::{ArrayLength, GenericArray};
 use heapless::consts::*;
 use heapless::String;
 
-pub enum EntryType {
-    /// Calls function when selected
+pub enum EntryType<'a, C, F>
+where
+    C: PixelColor,
+    F: Font,
+{
+    /// Select
     Select,
     /// Boolean
     Bool(bool),
     /// 32-bit integer (value, min, max)
     I32((i32, i32, i32)),
+    /// Submenu
+    Menu(&'a mut Menu<'a, C, F>),
+    /// Return from submenu
+    Return,
 }
 
 #[derive(Default, Clone)]
@@ -33,9 +40,13 @@ pub struct Keys {
     pub b: bool,
 }
 
-pub struct MenuEntry<'a> {
+pub struct MenuEntry<'a, C, F>
+where
+    C: PixelColor,
+    F: Font,
+{
     pub l: &'a str,
-    pub t: EntryType,
+    pub t: EntryType<'a, C, F>,
 }
 
 #[derive(Clone)]
@@ -47,35 +58,34 @@ pub struct MenuOptions<C: PixelColor, F: Font> {
     pub border: u32,
     pub spacing: u32,
 }
-pub struct Menu<'a, C, F, S>
+pub struct Menu<'a, C, F>
 where
     C: PixelColor,
     F: Font,
-    S: ArrayLength<MenuEntry<'a>>,
 {
     title: &'a str,
-    highlighted_option: u8,
+    highlighted_option: usize,
     selected: bool,
     redraw: bool,
     size: Size,
     options: MenuOptions<C, F>,
-    structure: GenericArray<MenuEntry<'a>, S>,
-    last_keys: Keys
+    structure: &'a mut [MenuEntry<'a, C, F>],
+    last_keys: Keys,
+    submenu: Option<usize>,
 }
 
-impl<'a, C, F, S> Menu<'a, C, F, S>
+impl<'a, C, F> Menu<'a, C, F>
 where
     C: PixelColor,
     F: Font,
-    S: ArrayLength<MenuEntry<'a>>
 {
     pub fn new(
         title: &'a str,
         options: MenuOptions<C, F>,
         size: Size,
-        structure: GenericArray<MenuEntry<'a>,S>,
-    ) -> Menu<'a, C, F, S> {
-        Menu {
+        structure: &'a mut [MenuEntry<'a, C, F>],
+    ) -> Menu<'a, C, F> {
+        Self {
             title,
             redraw: true,
             highlighted_option: 0,
@@ -83,24 +93,57 @@ where
             structure,
             size,
             options,
-            last_keys: Keys::default()
+            last_keys: Keys::default(),
+            submenu: None,
         }
     }
 
-    pub fn selected_option(&self) -> Option<u8> {
+    pub fn selected_option(&self) -> Option<&MenuEntry<'a, C, F>> {
         if self.selected {
-            Some(self.highlighted_option)
+            Some(&self.structure[self.highlighted_option])
         } else {
             None
         }
     }
 
-    pub fn entry_at(&self, index: usize) -> Option<&MenuEntry> {
+    pub fn entry_at(&self, index: usize) -> Option<&MenuEntry<'a, C, F>> {
         self.structure.get(index)
     }
 
+    // fn get_submenu(&self) -> Option<&MenuEntry<'a, C, F>> {
+    //     if self.submenu.is_some() {
+    //         match self.structure[self.submenu.unwrap()].t {
+    //             EntryType::Menu(ref mut menu) =>  {
+    //                 Some(menu)
+    //             },
+    //             _ => None
+    //         }
+    //     } else {
+    //         None
+    //     }
+
+    // }
+
     pub fn update(&mut self, keys: &Keys) -> bool {
-        let mut tmp_opt = self.highlighted_option as i8;
+        // If the submenu is visible, pass the keys to that instead
+        if self.submenu.is_some() {
+            match self.structure[self.submenu.unwrap()].t {
+                EntryType::Menu(ref mut menu) => {
+                    match menu.selected_option() {
+                        Some(entry) => match entry.t {
+                            EntryType::Return => self.submenu = None,
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                    menu.update(keys);
+                }
+                _ => {}
+            }
+            return false;
+        }
+
+        let mut tmp_opt = self.highlighted_option as i32;
 
         let tmp_keys = Keys {
             a: keys.a && !self.last_keys.a,
@@ -118,13 +161,13 @@ where
             tmp_opt += 1;
         }
 
-        if tmp_opt >= self.structure.len() as i8 {
+        if tmp_opt >= self.structure.len() as i32 {
             tmp_opt = 0;
         } else if tmp_opt < 0 {
-            tmp_opt = self.structure.len() as i8 - 1;
+            tmp_opt = self.structure.len() as i32 - 1;
         }
 
-        self.highlighted_option = tmp_opt as u8;
+        self.highlighted_option = tmp_opt as usize;
 
         self.selected = tmp_keys.a;
 
@@ -144,6 +187,17 @@ where
                 }
                 if tmp_keys.left && ((*val).0 > (*val).1) {
                     (*val).0 -= 1;
+                }
+            }
+            EntryType::Menu(_) => {
+                if tmp_keys.a {
+                    self.submenu = Some(self.highlighted_option);
+                    match self.structure[self.submenu.unwrap()].t {
+                        EntryType::Menu(ref mut menu) => {
+                            menu.redraw = true;
+                        }
+                        _ => {}
+                    }
                 }
             }
             _ => {}
@@ -173,7 +227,15 @@ where
     }
 
     pub fn draw<D: DrawTarget<Color = C>>(&mut self, display: &mut D) -> Result<(), D::Error> {
-        if self.redraw {
+        if self.submenu.is_some() {
+            match self.structure[self.submenu.unwrap()].t {
+                EntryType::Menu(ref mut menu) => {
+                    // if menu.selected_option().is_some(
+                    menu.draw(display)?;
+                }
+                _ => {}
+            }
+        } else if self.redraw {
             self.redraw = false;
 
             display.clear(self.options.background)?;
@@ -211,12 +273,11 @@ where
 
                 self.draw_text(display, self.structure[i].l, text_x, text_y)?;
 
-                match self.structure[i].t {
-                    EntryType::Select => {}
+                match &self.structure[i].t {
                     EntryType::Bool(val) => {
                         let x = match val {
-                            true => "<1>",
-                            false => "<0>",
+                            true => "<X>",
+                            false => "< >",
                         };
                         self.draw_text(
                             display,
@@ -239,6 +300,7 @@ where
                             text_y,
                         )?;
                     }
+                    _ => {}
                 }
             }
 

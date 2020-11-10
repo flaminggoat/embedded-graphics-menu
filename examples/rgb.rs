@@ -6,7 +6,6 @@ use sdl2::keyboard::Keycode;
 use std::{thread, time::Duration};
 
 use embedded_graphics_menu::{EntryType, Keys, Menu, MenuEntry, MenuOptions};
-use generic_array::GenericArray;
 
 fn main() -> Result<(), std::convert::Infallible> {
     let mut display: SimulatorDisplay<Rgb565> = SimulatorDisplay::new(Size::new(128, 160));
@@ -22,29 +21,7 @@ fn main() -> Result<(), std::convert::Infallible> {
         right: false,
     };
 
-    let options = MenuOptions {
-        text: Rgb565::WHITE,
-        background: Rgb565::BLUE,
-        highlight: Rgb565::GREEN,
-        border: 15,
-        spacing: 17,
-        font: embedded_graphics::fonts::Font6x8,
-    };
-    let menu_structure = GenericArray::from([
-        MenuEntry {
-            l: "Menu",
-            t: EntryType::Select,
-        },
-        MenuEntry {
-            l: "Music on",
-            t: EntryType::Bool(false),
-        },
-        MenuEntry {
-            l: "Heater",
-            t: EntryType::I32((-3, -10, 10)),
-        },
-    ]);
-    let start_menu_structure = GenericArray::from([
+    let mut food_menu_structure = [
         MenuEntry {
             l: "Cake",
             t: EntryType::Select,
@@ -54,29 +31,69 @@ fn main() -> Result<(), std::convert::Infallible> {
             t: EntryType::Select,
         },
         MenuEntry {
-            l: "Cheese",
+            l: "Cheese 1",
+            t: EntryType::Select,
+        },
+        MenuEntry {
+            l: "Cheese 2",
+            t: EntryType::Select,
+        },
+        MenuEntry {
+            l: "Cheese 3",
+            t: EntryType::Select,
+        },
+        MenuEntry {
+            l: "Cheese 4",
+            t: EntryType::Select,
+        },
+        MenuEntry {
+            l: "Cheese 5",
             t: EntryType::Select,
         },
         MenuEntry {
             l: "Back",
-            t: EntryType::Select,
+            t: EntryType::Return,
         },
-    ]);
+    ];
+
+    let options = MenuOptions {
+        text: Rgb565::WHITE,
+        background: Rgb565::BLUE,
+        highlight: Rgb565::GREEN,
+        border: 15,
+        spacing: 15,
+        font: embedded_graphics::fonts::Font6x8,
+    };
+
+    let mut food_menu = Menu::new(
+        "Food Choices",
+        options.clone(),
+        display.bounding_box().size,
+        &mut food_menu_structure,
+    );
+
+    let mut menu_structure = [
+        MenuEntry {
+            l: "Menu",
+            t: EntryType::Menu(&mut food_menu),
+        },
+        MenuEntry {
+            l: "Music on",
+            t: EntryType::Bool(false),
+        },
+        MenuEntry {
+            l: "Heater",
+            t: EntryType::I32((-3, -10, 10)),
+        },
+    ];
 
     let mut m = Menu::new(
         "Shop",
-        options.clone(),
-        display.bounding_box().size,
-        menu_structure,
-    );
-    let mut m2 = Menu::new(
-        "Food Choices",
         options,
         display.bounding_box().size,
-        start_menu_structure,
+        &mut menu_structure,
     );
 
-    let mut current_menu = 0;
     let mut heater = -3;
 
     'running: loop {
@@ -101,31 +118,14 @@ fn main() -> Result<(), std::convert::Infallible> {
             }
         }
 
-        if current_menu == 0 {
-            m.update(&keys);
-            m.draw(&mut display).unwrap();
+        m.update(&keys);
+        m.draw(&mut display).unwrap();
 
-            match m.selected_option() {
-                Some(index) => {
-                    if index == 0 {
-                        current_menu = 1;
-                        m2.force_redraw();
-                    }
-                }
-                None => {}
+        match m.selected_option() {
+            Some(entry) => {
+                // println!("Selected: {}", entry.l);
             }
-        } else {
-            m2.update(&keys);
-            m2.draw(&mut display).unwrap();
-            match m2.selected_option() {
-                Some(index) => {
-                    if index == 3 {
-                        current_menu = 0;
-                        m.force_redraw();
-                    }
-                }
-                None => {}
-            }
+            None => {}
         }
 
         // Read heater value from menu
